@@ -6,12 +6,12 @@
 
 // Display Libraries
 #include<SPI.h>
+#include<FlexCAN_T4.h>
 #include"Adafruit_GFX.h"
 #include"Adafruit_RA8875.h"
 
 // Our Libraries
 #include"Interpret.h"
-#include"Display.h"
 
 // Display definitions
 #define RA8875_INT 3
