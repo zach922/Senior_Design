@@ -21,7 +21,7 @@ This diagram outlines the connections we are making. This excludes our power sup
 
 This overhead view of the system shows the power from the power supply and the CANH/CANL bus connecting on the left. The transceiver is close to the Teensy 4.0 on the top left while the RA8875 driver board is connected on the right.
 
-![Teensy with transceiver and RA8875 connection](./assets/board.jpg)
+![Teensy with transceiver and RA8875 connection](./assets/boards.jpg)
 
 This is the configuration of the display. It shows many diagnostics such as speed, rpm, and oil temperature. With a fuel gauge on the right hand side.
 
