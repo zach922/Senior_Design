@@ -18,6 +18,7 @@
 #define COOLANT_TEMP 0x05
 #define OIL_TEMP 0x5C
 #define FUEL_LEVEL 0x2F
+#define VOLTAGE 0x42
 #define STBY  2
 
 typedef struct   {
@@ -26,9 +27,12 @@ typedef struct   {
   int ctmp; //coolant temp
   int otmp; //oil temp
   int flvl; //fuel level
+  int volt; //battery voltage
 } CANDATA;
 
 //Display definitions
+#define WIDTH 480
+#define HEIGHT 272
 #define RA8875_INT 3
 #define RA8875_CS 10
 #define RA8875_RESET 9
@@ -37,6 +41,7 @@ typedef struct   {
 Adafruit_RA8875 tft = Adafruit_RA8875(RA8875_CS, RA8875_RESET);
 FlexCAN_T4<CAN2, RX_SIZE_256, TX_SIZE_16> Can0;
 
+// Initialize CAN data struct
 CANDATA cdat;
 
 //Interpret CAN Data into usable diagnostic data
@@ -57,15 +62,122 @@ void processData(const uint8_t pid, const uint8_t buf[8]){
     else if(pid == FUEL_LEVEL){
         cdat.flvl = ((100*buf[3])/254);
     }
+    else if(pid == VOLTAGE){
+      cdat.volt = (256*buf[3]+buf[4])/1000;
+    }
 }
 
-//Interrupt to process recieved CAN message
-void canSniff(const CAN_message_t &msg) {
-  
-  //uint8_t pdat = 
-  processData(msg.buf[2], msg.buf);
+void displayVspd(){
+  tft.fillRect(140, 106, 120, 70, RA8875_BLACK);
 
-  printDiagnostic();
+  tft.textTransparent(RA8875_WHITE);
+  tft.textSetCursor(140,106);
+  tft.textEnlarge(8);
+  char str[8];
+  sprintf(str, "%d", cdat.vspd);
+  tft.textWrite(str);
+  tft.textSetCursor(260,106);
+  tft.textWrite("KPH");
+}
+
+void displayEspd(){
+  tft.fillRect(150, 170, 100, 55, RA8875_BLACK);
+
+  tft.textTransparent(RA8875_WHITE);
+  
+  tft.textSetCursor(150, 170);
+  tft.textEnlarge(2);
+  char str[8];
+  sprintf(str, "%d", cdat.espd);
+  tft.textWrite(str);
+  tft.textSetCursor(260,170);
+  tft.textWrite("RPM");
+}
+
+void displayOtmp(){
+  tft.fillRect(1, 30, 60, 35, RA8875_BLACK);
+
+  tft.textTransparent(RA8875_WHITE);
+  
+  tft.textSetCursor(1,30);
+  tft.textEnlarge(1);
+  char str[8];
+  sprintf(str, "%d", cdat.otmp);
+  tft.textWrite(str);
+  tft.textSetCursor(1,1);
+  tft.textWrite("OIL TEMP");
+}
+
+void displayCtmp(){
+  tft.fillRect(190, 30, 60, 35, RA8875_BLACK);
+
+  tft.textTransparent(RA8875_WHITE);
+  
+  tft.textSetCursor(190,30);
+  tft.textEnlarge(1);
+  char str[8];
+  sprintf(str, "%d", cdat.ctmp);
+  tft.textWrite(str);
+  tft.textSetCursor(160,1);
+  tft.textWrite("Coolant TEMP");
+}
+
+void displayFlvl(){
+  tft.fillRect(410, 120, 60, 140, RA8875_WHITE);
+
+  int lvl = ((100-cdat.flvl)*138)/100;
+  if (lvl > 1 ){
+    tft.fillRect(411, 121, 58, lvl, RA8875_BLACK);
+  }
+
+  
+  tft.textTransparent(RA8875_WHITE);
+  tft.textSetCursor(410,86);
+  tft.textEnlarge(1);
+  tft.textWrite("FUEL");
+  
+}
+
+void displayVolt(){
+  tft.fillRect(1, 230, 60, 35, RA8875_BLACK);
+
+  tft.textTransparent(RA8875_WHITE);
+  
+  tft.textSetCursor(1,230);
+  tft.textEnlarge(1);
+  char str[8];
+  sprintf(str, "%d", 12);
+  tft.textWrite(str);
+  tft.textSetCursor(1,200);
+  tft.textWrite("Voltage");
+}
+
+void displayChkEng(){
+    tft.fillRect(1, 100, 105, 15, RA8875_BLACK);
+    
+  if (cdat.ctmp>150 || cdat.otmp>150 )
+  {
+
+
+    tft.textTransparent(RA8875_WHITE);
+    tft.textSetCursor(1,100);
+    tft.textEnlarge(.95);
+    tft.textWrite("CHECK ENGINE!");
+  }
+}
+
+void displayDiagnostic(){
+  tft.textMode();
+  tft.textTransparent(RA8875_WHITE);
+  
+  displayVspd();
+  displayEspd();
+  displayOtmp();
+  displayCtmp();
+  displayFlvl();
+  displayVolt();
+  displayChkEng();
+
 }
 
 //Print entire CANDATA struct info
@@ -85,7 +197,7 @@ void printDiagnostic(){
 
 //request to update a specific diagnostic PID
 void requestDiagnostic(uint8_t pid){
-  CAN_message_t msg;
+  CAN_message_t msg, rx_msg;
   msg.id = 0x7DF;
   msg.buf[0] = 0x02;
   msg.buf[1] = 0x01;
@@ -96,16 +208,19 @@ void requestDiagnostic(uint8_t pid){
   msg.buf[6] = 0x00;
   msg.buf[7] = 0x00;
 
-
   static uint32_t timeout = millis();
   if (timeout - millis() > 200){
     Can0.write(msg);
     timeout = millis();
   }
+
+  if(Can0.read(rx_msg) && rx_msg.id == 0x7E8){
+    processData(rx_msg.buf[2], rx_msg.buf);
+  }
 }
 
 //Request for all diagnostics to be updated
-void request(){
+void requestAll(){
   requestDiagnostic(VEHICLE_SPEED);
   requestDiagnostic(ENGINE_RPM);
   requestDiagnostic(COOLANT_TEMP);
@@ -113,64 +228,45 @@ void request(){
   requestDiagnostic(FUEL_LEVEL);
 }
 
-// convert int to string
-char* toString(const int num){
-    char str[8];
-    sprintf(str, "%d", num);
-
-    return str;
-}
 
 void setup() {
 
   // CAN Config
-  Serial.begin(115200); delay(400);
+  Serial.begin(11500); delay(400);
   pinMode(STBY, OUTPUT); digitalWrite(STBY, LOW); /* optional tranceiver enable pin */
   Can0.begin();
   Can0.setBaudRate(500000);
   Can0.setMaxMB(16);
   Can0.enableFIFO();
-  Can0.enableFIFOInterrupt();
-  Can0.onReceive(canSniff);
   Can0.mailboxStatus();
-
-  // Display Config
-  //Serial.begin(9600);
-  //Serial.println("CAN Start");
   
   // Initialize the display using RA8875_480x272
-//  if (!tft.begin(RA8875_480x272)) {
-//    Serial.println("RA8875 Not Found!");
-//    while (1);
-//  }
-//
-//  Serial.println("Found RA8875");
-//
-//  // initialize Screen
-//  tft.displayOn(true);
-//  tft.GPIOX(true);      // Enable TFT - display enable tied to GPIOX
-//  tft.PWM1config(true, RA8875_PWM_CLK_DIV1024); // PWM output for backlight
-//  tft.PWM1out(255);
-//  tft.fillScreen(RA8875_BLACK);
+  if (!tft.begin(RA8875_480x272)) {
+    Serial.println("RA8875 Not Found!");
+    while (1);
+  }
 
-
-  char* str = toString(60);
-
-  // print text on display
-//  tft.textMode();
-//  tft.textSetCursor(200,200);
-//  tft.textTransparent(RA8875_WHITE);
-//
-//  tft.textEnlarge(1);
-//  tft.textWrite(str);
-
-  pinMode(RA8875_INT, INPUT);
-  digitalWrite(RA8875_INT, HIGH);
+  // initialize Screen
+  tft.displayOn(true);
+  tft.GPIOX(true);      // Enable TFT - display enable tied to GPIOX
+  tft.PWM1config(true, RA8875_PWM_CLK_DIV1024); // PWM output for backlight
+  tft.PWM1out(255);
+  tft.fillScreen(RA8875_BLACK);
 
 }
+
+int updateDisp = 0;
 
 void loop() {
   Can0.events();
 
-  request();
+  requestAll();
+
+  if (updateDisp == 1000){
+    updateDisp=0;
+    displayDiagnostic();
+    printDiagnostic();
+  }
+  updateDisp++;
+
 }
