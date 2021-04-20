@@ -146,7 +146,7 @@ void displayVolt(){
   tft.textSetCursor(1,230);
   tft.textEnlarge(1);
   char str[8];
-  sprintf(str, "%d", 12);
+  sprintf(str, "%d", cdat.volt);
   tft.textWrite(str);
   tft.textSetCursor(1,200);
   tft.textWrite("Voltage");
@@ -226,6 +226,7 @@ void requestAll(){
   requestDiagnostic(COOLANT_TEMP);
   requestDiagnostic(OIL_TEMP);
   requestDiagnostic(FUEL_LEVEL);
+  requestDiagnostic(VOLTAGE);
 }
 
 
